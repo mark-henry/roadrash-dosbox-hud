@@ -1,0 +1,20 @@
+# Large and/or copyrighted artifacts — never commit these
+# (Win95 disk images, game CD, ROADRASH.EXE, third-party cheat table/trainer)
+*.img
+*.qcow2
+*.iso
+*.ISO
+*.exe
+*.EXE
+*.CT
+*.7z
+*.zip
+RoadRashTrainer/
+
+# Memory dumps / generated data
+*.bin
+*.log
+telemetry.csv
+
+# Python
+__pycache__/

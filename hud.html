@@ -1,0 +1,111 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Road Rash telemetry</title>
+<style>
+  :root { --bg:#0b0e13; --fg:#e6edf3; --muted:#7d8590; --pos:#3fb950; --neg:#58a6ff;
+          --pos2:#f0883e; --warn:#f85149; --panel:#161b22; --line:#30363d; }
+  body { background:var(--bg); color:var(--fg); font:13px/1.4 ui-monospace,Menlo,monospace; margin:0; padding:22px; }
+  h2 { font-size:11px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+       margin:22px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .g { display:grid; grid-template-columns:170px 1fr 120px; align-items:center; gap:12px; margin:6px 0; }
+  .lbl { color:var(--muted); }
+  .lbl b { color:var(--fg); font-weight:600; }
+  .val { text-align:right; font-variant-numeric:tabular-nums; }
+  .track { position:relative; height:18px; background:var(--panel); border-radius:3px; overflow:hidden; }
+  .fill  { position:absolute; inset:0 auto 0 0; background:var(--pos); transition:width .05s linear; }
+  .bi    { position:relative; height:18px; background:var(--panel); border-radius:3px; }
+  .bi::before { content:''; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line); }
+  .bn { position:absolute; top:0; bottom:0; right:50%; background:var(--neg);  transition:width .05s linear; }
+  .bp { position:absolute; top:0; bottom:0; left:50%;  background:var(--pos2); transition:width .05s linear; }
+  .num { height:18px; }
+  .err { color:var(--warn); min-height:1.2em; margin-top:14px; }
+  .crash-on { color:var(--warn); font-weight:700; }
+  #header { display:flex; justify-content:space-between; align-items:baseline; }
+  #header span { color:var(--muted); font-size:11px; }
+</style>
+
+<div id="header"><h2 style="border:0;margin:0">Road Rash — live rider telemetry</h2><span id="meta"></span></div>
+<div id="panel"></div>
+<div class="err" id="err"></div>
+
+<script>
+// ============ EDIT HERE to pare down / retune. kind: uni | bi | num ============
+// `max` is the bar's full-scale in RAW int units (these fields use different scales).
+const GROUPS = [
+  ['Motion', [
+    {key:'speed_fwd', label:'speed', off:'+0xEC', kind:'uni', max:30000},
+    {key:'speed2',    label:'speed (copy)', off:'+0x108', kind:'uni', max:30000},
+    {key:'vel_lat',   label:'slide / lateral vel', off:'+0xF0', kind:'bi', max:8000},
+    {key:'vel_lat2',  label:'slide (copy)', off:'+0x104', kind:'bi', max:8000},
+    {key:'vel_vert',  label:'vertical vel', off:'+0xF4', kind:'bi', max:4000},
+  ]],
+  ['Steering / lean', [
+    {key:'turn_steer',  label:'turn (steer dir)', off:'+0x128', kind:'bi', max:131072},
+    {key:'turnforce_5C',label:'turn force A', off:'+0x5C', kind:'bi', max:2000000},
+    {key:'turnforce_60',label:'turn force B', off:'+0x60', kind:'bi', max:1200000},
+    {key:'turnforce_68',label:'turn force A2', off:'+0x68', kind:'bi', max:2000000},
+    {key:'turnforce_6C',label:'turn force B2', off:'+0x6C', kind:'bi', max:1200000},
+    {key:'lean_288',    label:'lean A', off:'+0x288', kind:'bi', max:10000},
+    {key:'lean_28C',    label:'lean B', off:'+0x28C', kind:'bi', max:10000},
+  ]],
+  ['Position (world coords)', [
+    {key:'pos_1C',  label:'pos', off:'+0x1C',  kind:'num'},
+    {key:'pos_30',  label:'pos', off:'+0x30',  kind:'num'},
+    {key:'pos_308', label:'pos', off:'+0x308', kind:'num'},
+    {key:'pos_310', label:'pos', off:'+0x310', kind:'num'},
+  ]],
+  ['Status', [
+    {key:'health', label:'health', off:'+0x2F0', kind:'uni', max:160},
+    {key:'crash',  label:'crash state', off:'+0x2F4', kind:'num'},
+    {key:'rider',  label:'rider index', off:'+0x328', kind:'num'},
+  ]],
+];
+// ===============================================================================
+
+const panel = document.getElementById('panel');
+for (const [title, gauges] of GROUPS) {
+  const h = document.createElement('h2'); h.textContent = title; panel.appendChild(h);
+  for (const g of gauges) {
+    const row = document.createElement('div'); row.className = 'g';
+    const lbl = `<span class="lbl"><b>${g.label}</b> <small>${g.off}</small></span>`;
+    let mid;
+    if (g.kind === 'uni') mid = `<div class="track"><div class="fill" id="${g.key}_f"></div></div>`;
+    else if (g.kind === 'bi') mid = `<div class="bi"><div class="bn" id="${g.key}_n"></div><div class="bp" id="${g.key}_p"></div></div>`;
+    else mid = `<div class="num"></div>`;
+    row.innerHTML = `${lbl}${mid}<span class="val" id="${g.key}_v"></span>`;
+    panel.appendChild(row);
+  }
+}
+
+const clamp = (x) => Math.max(0, Math.min(100, x));
+const $ = (id) => document.getElementById(id);
+function render(g, raw) {
+  $(g.key + '_v').textContent = raw;
+  if (g.kind === 'uni') $(g.key + '_f').style.width = clamp(raw / g.max * 100) + '%';
+  else if (g.kind === 'bi') {
+    const half = clamp(Math.abs(raw) / g.max * 100) / 2;
+    $(g.key + '_p').style.width = (raw >= 0 ? half : 0) + '%';
+    $(g.key + '_n').style.width = (raw < 0 ? half : 0) + '%';
+  }
+}
+const FLAT = GROUPS.flatMap(([, gs]) => gs);
+
+const es = new EventSource('/stream');
+es.onmessage = (e) => {
+  const d = JSON.parse(e.data);
+  if (d.error) { $('err').textContent = '⚠ ' + d.error; return; }
+  $('err').textContent = '';
+  for (const g of FLAT) if (g.key in d) render(g, d[g.key]);
+  const c = $('crash_v'); if (c) c.className = 'val' + (d.crash ? ' crash-on' : '');
+  $('meta').textContent = 'struct @ 0x' + (d.struct_lin >>> 0).toString(16);
+};
+es.onerror = () => $('err').textContent = '⚠ stream disconnected — is reader.py running?';
+
+// live-reload: reload when hud.html changes on disk
+let mt0 = null;
+setInterval(async () => {
+  try { const m = await (await fetch('/mtime')).text();
+    if (mt0 === null) mt0 = m; else if (m !== mt0) location.reload();
+  } catch {}
+}, 1000);
+</script>
