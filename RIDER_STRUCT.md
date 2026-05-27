@@ -79,16 +79,28 @@ Copy pairs (differ in <0.3% of frames = torn reads, treat as identical): +0x108�
 +0x288 vs +0x28C (lean lead/lag, 66%).
 
 Marked-run findings:
-- **Slip is slide-specific, not braking.** During a "dismount-key spam" run the bike braked
-  hard (speed 6860→1084) in a straight line, yet +0x20/+0x34/+0x164/+0xF0/+0x5C were all
-  ZERO. So those fields engage only on sideways sliding, not on deceleration per se. User's
-  ear: screech ↔ high +0x164. So slip/screech = +0x164 intensity (+0x20/+0x34 = the
-  speed-scrub it causes), distinct from the dismount/brake decel mechanism.
+- **Tire screech = +0x164 (slip intensity) above ~50.** Confirmed via two deliberately-late
+  marks (~0.5s lag): in both, +0x164 ramped to a peak (64, 76) exactly ~30 frames BEFORE the
+  mark onset, then decayed — matching the user being "half a second late on the button," and
+  matching the ear ("high slip intensity ↔ screech"). Non-screech hard turns top out ~46.
+- **+0x20/+0x34 are NOT the screech** — they were exactly ZERO through both confirmed
+  screeches (and through the dismount brake). Some other decel-specific field; demoted.
+- **+0x298 = oil / low-grip timer that AMPLIFIES slip (resolved).** A labeled run of light
+  turns right after an oil slick: +0x298 decaying ~114→61, and two screeches from LIGHT turns
+  (lateral ~1800, turn-state modest) — yet +0x164 hit ~66. Without oil, lateral ~1800 gives
+  +0x164 ≈ 12, so the oil state ~5×'d the slip for the same input. So +0x298 reduces grip
+  while it counts down; +0x164 (the screech) crosses threshold far more easily during it.
+- Dismount brake (speed 6860→1084, straight) left +0x164/+0xF0/+0x5C at ZERO — slip fields
+  are slide-specific, not deceleration per se.
 - **Dismount key is NOT in the rider struct** — no per-press field toggles; only the speed
   drop is visible. Input/key state lives elsewhere (global input buffer). Can't be used as an
   in-struct event marker.
 - **Rough terrain / off-road = +0x158** (0 on road, 20–30 on the shoulder). Companions:
   +0x114 (→30 off-road), +0x130 (oscillates ±600 = bumpiness).
+- **Oil-slick "oily state" = +0x298** — a countdown timer set to ~117 on contact and
+  ticking down ~1/frame to 0 over ~1.6s (clean monotonic decay confirmed across 3 marked oil
+  hits; ×11.6 vs baseline). This is the post-oil slip-vulnerability window the physics reads
+  to reduce grip. (Caps-Lock keyboard marker via marker.py made these labeled runs trivial.)
 
 ## How these map into the running game
 Win95 loads ROADRASH.EXE at 0x400000, so guest-virtual addresses == `0x400000 + RVA`.

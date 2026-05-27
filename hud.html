@@ -53,16 +53,17 @@ const GROUPS = [
   ['Motion', [
     [0xEC,'speed','uni'], [0xF0,'lateral motion (L/R)','bi'], [0xF4,'vertical vel (hills/jumps)','bi'],
   ]],
-  ['Slip — speed-bleed on slides (screech ↔ high slip intensity)', [
-    [0x164,'slip intensity','uni'], [0x20,'slip scrub','uni'], [0x34,'slip scrub B','uni'],
+  ['Slip / screech (tire screech ↔ slip intensity above ~50)', [
+    [0x164,'slip intensity (→ screech)','uni'],
   ]],
   ['Steering', [
     [0x128,'road bend','bi'], [0x60,'turning state','bi'],
     [0x5C,'hard-turn force','bi'], [0x118,'lateral/lean','bi'],
   ]],
   ['Lean', [ [0x288,'lean (lead)','bi'], [0x28C,'lean (lag)','bi'] ]],
-  ['Terrain', [
-    [0x158,'rough terrain (off-road)','uni'], [0x114,'terrain grip?','uni'], [0x130,'bump / wobble','bi'],
+  ['Terrain & hazards', [
+    [0x158,'rough terrain (off-road)','uni'], [0x298,'oil timer (slip-vuln, counts down)','uni'],
+    [0x114,'terrain grip?','uni'], [0x130,'bump / wobble','bi'],
   ]],
   ['Status', [
     [0x2F0,'health','uni'], [0x2F4,'crash state','num'], [0x328,'rider index','num'],
