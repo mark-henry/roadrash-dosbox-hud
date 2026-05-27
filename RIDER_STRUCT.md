@@ -43,9 +43,27 @@ Struct base = dword at 0x4642D8 (was 0x00E96B58 this race). Values are 16.16 fix
 | `+0x2F4` | crash/fall state | 0 when upright |
 | `+0x328` | rider index | 0 = player (our anchor check) |
 
-So all three user targets are found: **position** = +0x1C/+0x30 cluster, **turning** = +0x128
-(+ lean forces +0x05C/+0x060), **slide** = +0xF0 lateral velocity. Plus speed (+0xEC) and
-crash (+0x2F4) for free.
+## SLIP found (telemetry.csv differential, screeching vs gentle turns)
+The earlier "+0x05C/slide" guesses were refined by logging the full struct during gentle
+turns then screeching slides:
+
+| Offset | Field | Evidence |
+|--------|-------|----------|
+| `+0xF0` | lateral velocity (L/R) | present in ALL cornering, gentle→hard (mislabeled "slide") |
+| `+0x128` | road bend (track curvature pushing the rider) | ±50.0 max, scales with speed, 0 at standstill |
+| `+0x5C` (copy `+0x68`) | **slip / slide FORCE** | exactly 0 in normal cornering; engages (stepped, signed, ±50–63) ONLY when traction breaks → tire screech |
+| `+0x164` | **slip INTENSITY** (0–103) | fires in discrete hard-slide episodes; magnitude scales with slide severity; the screech correlate |
+| `+0x118` | slip angle (signed, ±~43) | active across corners, grows with slide |
+| `+0x60`/`+0x6C` | turning state | L/R turn input/state |
+| `+0x288`/`+0x28C` | lean (lead / 1-frame-lagged copy) | |
+
+Key distinction: lateral velocity (`+0xF0`) ≠ slip. There are hard-corner frames with high
+`+0xF0` where `+0x5C`/`+0x164` stay 0 (cornering without breaking traction). Slip = `+0x5C`
+engaged + `+0x164` ramping = the screech.
+
+So all targets resolved: **position** = +0x1C/+0x30/+0x308/+0x310, **turning** = bend +0x128
++ turn state +0x60, **slip/screech** = +0x5C force & +0x164 intensity, **slide(lateral)** =
++0xF0. Plus speed +0xEC, vertical vel +0xF4, crash +0x2F4.
 
 ## How these map into the running game
 Win95 loads ROADRASH.EXE at 0x400000, so guest-virtual addresses == `0x400000 + RVA`.

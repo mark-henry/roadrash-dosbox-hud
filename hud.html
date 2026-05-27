@@ -4,108 +4,157 @@
 <style>
   :root { --bg:#0b0e13; --fg:#e6edf3; --muted:#7d8590; --pos:#3fb950; --neg:#58a6ff;
           --pos2:#f0883e; --warn:#f85149; --panel:#161b22; --line:#30363d; }
-  body { background:var(--bg); color:var(--fg); font:13px/1.4 ui-monospace,Menlo,monospace; margin:0; padding:22px; }
+  body { background:var(--bg); color:var(--fg); font:13px/1.4 ui-monospace,Menlo,monospace; margin:0; padding:20px; }
   h2 { font-size:11px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
        margin:22px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
-  .g { display:grid; grid-template-columns:170px 1fr 120px; align-items:center; gap:12px; margin:6px 0; }
-  .lbl { color:var(--muted); }
-  .lbl b { color:var(--fg); font-weight:600; }
+  #bar { display:flex; gap:10px; align-items:center; }
+  button { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:5px;
+           padding:6px 12px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--muted); }
+  #mark.on { background:var(--warn); border-color:var(--warn); color:#fff; font-weight:700; }
+  #err { color:var(--warn); margin-left:auto; }
+  .g { display:grid; grid-template-columns:200px 1fr 200px; align-items:center; gap:12px; margin:5px 0; }
+  .lbl { color:var(--muted); } .lbl b { color:var(--fg); font-weight:600; }
   .val { text-align:right; font-variant-numeric:tabular-nums; }
-  .track { position:relative; height:18px; background:var(--panel); border-radius:3px; overflow:hidden; }
-  .fill  { position:absolute; inset:0 auto 0 0; background:var(--pos); transition:width .05s linear; }
-  .bi    { position:relative; height:18px; background:var(--panel); border-radius:3px; }
+  .val small { color:var(--muted); }
+  .track,.bi { position:relative; height:16px; background:var(--panel); border-radius:3px; }
+  .track { overflow:hidden; } .fill { position:absolute; inset:0 auto 0 0; background:var(--pos); }
   .bi::before { content:''; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--line); }
-  .bn { position:absolute; top:0; bottom:0; right:50%; background:var(--neg);  transition:width .05s linear; }
-  .bp { position:absolute; top:0; bottom:0; left:50%;  background:var(--pos2); transition:width .05s linear; }
-  .num { height:18px; }
-  .err { color:var(--warn); min-height:1.2em; margin-top:14px; }
+  .bn { position:absolute; top:0; bottom:0; right:50%; background:var(--neg); }
+  .bp { position:absolute; top:0; bottom:0; left:50%; background:var(--pos2); }
   .crash-on { color:var(--warn); font-weight:700; }
-  #header { display:flex; justify-content:space-between; align-items:baseline; }
-  #header span { color:var(--muted); font-size:11px; }
+  table { border-collapse:collapse; font-size:12px; width:100%; }
+  th { text-align:right; color:var(--muted); font-weight:600; cursor:pointer; padding:2px 8px;
+       border-bottom:1px solid var(--line); user-select:none; }
+  th:first-child { text-align:left; }
+  td { text-align:right; font-variant-numeric:tabular-nums; padding:1px 8px; }
+  td:first-child { text-align:left; color:var(--muted); }
+  tr.active td:first-child { color:var(--pos); }
 </style>
 
-<div id="header"><h2 style="border:0;margin:0">Road Rash — live rider telemetry</h2><span id="meta"></span></div>
-<div id="panel"></div>
-<div class="err" id="err"></div>
+<div id="bar">
+  <h2 style="border:0;margin:0">Road Rash — live telemetry</h2>
+  <button id="mark">MARK: off</button>
+  <button id="reset">reset peaks</button>
+  <span id="err"></span>
+</div>
+
+<div id="interp"></div>
+
+<h2>Discovery — every dword (click a header to sort; hunt the slip field while screeching)</h2>
+<table id="disc"><thead><tr>
+  <th data-k="off">offset</th><th data-k="cur">current</th>
+  <th data-k="min">min</th><th data-k="max">max</th><th data-k="range">range ▾</th>
+</tr></thead><tbody></tbody></table>
 
 <script>
-// ============ EDIT HERE to pare down / retune. kind: uni | bi | num ============
-// `max` is the bar's full-scale in RAW int units (these fields use different scales).
+// ---- interpreted fields (offset -> label, kind). Edit freely; auto-saved on reload. ----
 const GROUPS = [
   ['Motion', [
-    {key:'speed_fwd', label:'speed', off:'+0xEC', kind:'uni', max:30000},
-    {key:'speed2',    label:'speed (copy)', off:'+0x108', kind:'uni', max:30000},
-    {key:'vel_lat',   label:'slide / lateral vel', off:'+0xF0', kind:'bi', max:8000},
-    {key:'vel_lat2',  label:'slide (copy)', off:'+0x104', kind:'bi', max:8000},
-    {key:'vel_vert',  label:'vertical vel', off:'+0xF4', kind:'bi', max:4000},
+    [0xEC,'speed','uni'], [0xF0,'lateral motion (L/R)','bi'], [0xF4,'vertical vel (hills/jumps)','bi'],
   ]],
-  ['Steering / lean', [
-    {key:'turn_steer',  label:'turn (steer dir)', off:'+0x128', kind:'bi', max:131072},
-    {key:'turnforce_5C',label:'turn force A', off:'+0x5C', kind:'bi', max:2000000},
-    {key:'turnforce_60',label:'turn force B', off:'+0x60', kind:'bi', max:1200000},
-    {key:'turnforce_68',label:'turn force A2', off:'+0x68', kind:'bi', max:2000000},
-    {key:'turnforce_6C',label:'turn force B2', off:'+0x6C', kind:'bi', max:1200000},
-    {key:'lean_288',    label:'lean A', off:'+0x288', kind:'bi', max:10000},
-    {key:'lean_28C',    label:'lean B', off:'+0x28C', kind:'bi', max:10000},
+  ['Slip / traction (tire screech!)', [
+    [0x5C,'slip force (engages on slide)','bi'], [0x68,'slip force (copy)','bi'],
+    [0x164,'slip intensity','uni'], [0x118,'slip angle','bi'],
   ]],
-  ['Position (world coords)', [
-    {key:'pos_1C',  label:'pos', off:'+0x1C',  kind:'num'},
-    {key:'pos_30',  label:'pos', off:'+0x30',  kind:'num'},
-    {key:'pos_308', label:'pos', off:'+0x308', kind:'num'},
-    {key:'pos_310', label:'pos', off:'+0x310', kind:'num'},
+  ['Bend & turn', [
+    [0x128,'road bend','bi'], [0x60,'turning state','bi'], [0x6C,'turning state (copy)','bi'],
   ]],
+  ['Lean', [ [0x288,'lean (lead)','bi'], [0x28C,'lean (lag)','bi'] ]],
   ['Status', [
-    {key:'health', label:'health', off:'+0x2F0', kind:'uni', max:160},
-    {key:'crash',  label:'crash state', off:'+0x2F4', kind:'num'},
-    {key:'rider',  label:'rider index', off:'+0x328', kind:'num'},
+    [0x2F0,'health','uni'], [0x2F4,'crash state','num'], [0x328,'rider index','num'],
+    [0x1C,'position A','num'], [0x30,'position B','num'], [0x308,'position C','num'], [0x310,'position D','num'],
   ]],
 ];
-// ===============================================================================
 
-const panel = document.getElementById('panel');
-for (const [title, gauges] of GROUPS) {
-  const h = document.createElement('h2'); h.textContent = title; panel.appendChild(h);
-  for (const g of gauges) {
-    const row = document.createElement('div'); row.className = 'g';
-    const lbl = `<span class="lbl"><b>${g.label}</b> <small>${g.off}</small></span>`;
-    let mid;
-    if (g.kind === 'uni') mid = `<div class="track"><div class="fill" id="${g.key}_f"></div></div>`;
-    else if (g.kind === 'bi') mid = `<div class="bi"><div class="bn" id="${g.key}_n"></div><div class="bp" id="${g.key}_p"></div></div>`;
-    else mid = `<div class="num"></div>`;
-    row.innerHTML = `${lbl}${mid}<span class="val" id="${g.key}_v"></span>`;
-    panel.appendChild(row);
-  }
-}
-
-const clamp = (x) => Math.max(0, Math.min(100, x));
 const $ = (id) => document.getElementById(id);
-function render(g, raw) {
-  $(g.key + '_v').textContent = raw;
-  if (g.kind === 'uni') $(g.key + '_f').style.width = clamp(raw / g.max * 100) + '%';
-  else if (g.kind === 'bi') {
-    const half = clamp(Math.abs(raw) / g.max * 100) / 2;
-    $(g.key + '_p').style.width = (raw >= 0 ? half : 0) + '%';
-    $(g.key + '_n').style.width = (raw < 0 ? half : 0) + '%';
+const hex = (o) => '+0x' + o.toString(16).toUpperCase();
+let N = 0, peak = [], lo = [], hi = [], started = false, sortKey = 'range', sortDir = -1;
+
+// build interpreted rows
+const interp = $('interp');
+for (const [title, rows] of GROUPS) {
+  const h = document.createElement('h2'); h.textContent = title; interp.appendChild(h);
+  for (const [off, label, kind] of rows) {
+    const d = document.createElement('div'); d.className = 'g';
+    const mid = kind === 'uni' ? `<div class="track"><div class="fill" id="f${off}"></div></div>`
+              : kind === 'bi'  ? `<div class="bi"><div class="bn" id="n${off}"></div><div class="bp" id="p${off}"></div></div>`
+              : `<div></div>`;
+    d.innerHTML = `<span class="lbl"><b>${label}</b></span>${mid}<span class="val" id="v${off}"></span>`;
+    interp.appendChild(d);
   }
 }
-const FLAT = GROUPS.flatMap(([, gs]) => gs);
+const KNOWN = Object.fromEntries(GROUPS.flatMap(([, r]) => r).map(([o, l, k]) => [o, [l, k]]));
 
+function initArrays(n) {
+  N = n; peak = Array(n).fill(0); lo = Array(n).fill(Infinity); hi = Array(n).fill(-Infinity);
+  const tb = $('disc').querySelector('tbody');
+  tb.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const tr = document.createElement('tr'); tr.id = 'r' + i;
+    tr.innerHTML = `<td>${hex(i * 4)}</td><td id="c${i}"></td><td id="lo${i}"></td><td id="hi${i}"></td><td id="rg${i}"></td>`;
+    tb.appendChild(tr);
+  }
+}
+function resetPeaks() { peak.fill(0); lo.fill(Infinity); hi.fill(-Infinity); }
+$('reset').onclick = resetPeaks;
+
+let markOn = false;
+$('mark').onclick = () => { markOn = !markOn; fetch('/mark?v=' + (markOn ? 1 : 0));
+  $('mark').textContent = 'MARK: ' + (markOn ? 'ON' : 'off'); $('mark').className = markOn ? 'on' : ''; };
+
+$('disc').querySelectorAll('th').forEach(th => th.onclick = () => {
+  const k = th.dataset.k; sortDir = (sortKey === k) ? -sortDir : -1; sortKey = k; resort();
+});
+function resort() {
+  const tb = $('disc').querySelector('tbody');
+  const key = (i) => sortKey === 'off' ? i : sortKey === 'cur' ? Math.abs(cur[i] || 0)
+            : sortKey === 'min' ? lo[i] : sortKey === 'max' ? hi[i] : (hi[i] - lo[i]);
+  const order = [...Array(N).keys()].sort((a, b) => (key(a) - key(b)) * sortDir);
+  for (const i of order) tb.appendChild($('r' + i));
+}
+
+let cur = [], frame = 0;
 const es = new EventSource('/stream');
 es.onmessage = (e) => {
   const d = JSON.parse(e.data);
   if (d.error) { $('err').textContent = '⚠ ' + d.error; return; }
   $('err').textContent = '';
-  for (const g of FLAT) if (g.key in d) render(g, d[g.key]);
-  const c = $('crash_v'); if (c) c.className = 'val' + (d.crash ? ' crash-on' : '');
-  $('meta').textContent = 'struct @ 0x' + (d.struct_lin >>> 0).toString(16);
+  cur = d.v;
+  if (cur.length !== N) initArrays(cur.length);   // size peak arrays from the data itself
+  // keep mark button in sync with server
+  if (!!d.mark !== markOn) { markOn = !!d.mark; $('mark').textContent = 'MARK: ' + (markOn ? 'ON' : 'off'); $('mark').className = markOn ? 'on' : ''; }
+
+  for (let i = 0; i < N; i++) {
+    const x = cur[i];
+    if (x < lo[i]) lo[i] = x; if (x > hi[i]) hi[i] = x;
+    peak[i] = Math.max(peak[i], Math.abs(x));
+  }
+  // interpreted gauges (auto-scaled to running peak)
+  for (const off in KNOWN) {
+    const o = +off, i = o / 4, [, kind] = KNOWN[off], x = cur[i], pk = peak[i] || 1;
+    $('v' + o).innerHTML = x + ` <small>${lo[i]}…${hi[i]}</small>`;
+    if (kind === 'uni') $('f' + o).style.width = Math.min(100, Math.abs(x) / pk * 100) + '%';
+    else if (kind === 'bi') {
+      const h = Math.min(100, Math.abs(x) / pk * 100) / 2;
+      $('p' + o).style.width = (x >= 0 ? h : 0) + '%'; $('n' + o).style.width = (x < 0 ? h : 0) + '%';
+    }
+    if (o === 0x2F4) $('v' + o).className = 'val' + (x ? ' crash-on' : '');
+  }
+  // discovery table values (text only each frame; rows reorder on header click)
+  for (let i = 0; i < N; i++) {
+    $('c' + i).textContent = cur[i];
+    $('lo' + i).textContent = lo[i] === Infinity ? '' : lo[i];
+    $('hi' + i).textContent = hi[i] === -Infinity ? '' : hi[i];
+    $('rg' + i).textContent = (hi[i] - lo[i]) || 0;
+    $('r' + i).className = (hi[i] - lo[i]) ? 'active' : '';
+  }
+  if (++frame % 15 === 0 && sortKey !== 'off') resort();   // re-sort ~2x/sec when sorting by activity
 };
 es.onerror = () => $('err').textContent = '⚠ stream disconnected — is reader.py running?';
 
-// live-reload: reload when hud.html changes on disk
+// live-reload on hud.html change
 let mt0 = null;
-setInterval(async () => {
-  try { const m = await (await fetch('/mtime')).text();
-    if (mt0 === null) mt0 = m; else if (m !== mt0) location.reload();
-  } catch {}
-}, 1000);
+setInterval(async () => { try { const m = await (await fetch('/mtime')).text();
+  if (mt0 === null) mt0 = m; else if (m !== mt0) location.reload(); } catch {} }, 1000);
 </script>
