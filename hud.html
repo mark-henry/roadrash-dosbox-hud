@@ -71,32 +71,59 @@
 </tr></thead><tbody></tbody></table>
 
 <script>
-// ---- interpreted fields (offset -> label, kind). Edit freely; auto-saved on reload. ----
+/* ============================================================================
+   SINGLE SOURCE OF TRUTH — Road Rash (PC v1.0, ROADRASH.EXE @ ImageBase 0x400000)
+   rider-struct field map. The gauges below ARE the documentation; commentary
+   lives in the comments. reader.py follows the pointer at virtual 0x4642D8 ->
+   the active bike struct; every offset here is from that struct base. Found via
+   live DOSBox-X memory reads + Caps-Lock-marked runs (story in LOG.md / git log).
+   FRONTIERS: (1) rivals on the track strip — find the rider array (0x40 stride,
+   player = rider 0) and stream each rival's +0x1C. (2) a track-length field to
+   auto-calibrate the finish line.
+   Each entry: [offset, label, kind];  kind = uni | bi | num | meter
+   ============================================================================ */
 const GROUPS = [
   ['Motion', [
-    [0xEC,'speed','uni'], [0xF0,'lateral motion (L/R)','bi'], [0xF4,'vertical vel (hills/jumps)','bi'],
+    [0xEC,  'speed',                      'uni'],  // forward speed (near-copy at 0x108)
+    [0x2E8, 'forward speed (≈0xEC)',       'uni'],  // ~identical to 0xEC (corr 1.0, +24)
+    [0x114, 'throttle/brake',             'bi'],   // player accel/brake input level
+    [0xF0,  'lateral velocity (L/R)',     'bi'],   // instantaneous sideways speed (copy at 0x104)
+    [0x10C, 'net lateral movement',       'bi'],   // bounded ±~2500; not a clean integral of 0xF0
+    [0xD4,  'lateral pos?',               'bi'],   // lateral-ish; does NOT saturate at the road edge
+    [0xF4,  'vertical vel (hills/jumps)', 'bi'],   // + uphill / − downhill; spikes on jumps
   ]],
-  ['Slip / screech (tire screech ↔ slip intensity above ~50)', [
-    [0x164,'slip meter','meter'],
-  ]],
+  ['Slip / screech', [
+    [0x164, 'slip meter',                 'meter'],// tire screech when > ~50 (SLIP_THRESH); slide-specific,
+  ]],                                              //   NOT braking; amplified ~5x while oil timer 0x298 is active
   ['Steering', [
-    [0x128,'road bend','bi'], [0x130,'bend push force','bi'], [0x60,'turning state','bi'],
-    [0x5C,'hard-turn force','bi'], [0x118,'lateral/lean','bi'],
+    [0x128, 'road bend',                  'bi'],   // track curvature pushing the rider (±50, scales w/ speed)
+    [0x130, 'bend push force',            'bi'],   // ≈ bend/351 (r=0.76) — lateral push the bend produces
+    [0x60,  'turning state',              'bi'],   // L/R turn input/state (copy at 0x6C)
+    [0x5C,  'hard-turn force',            'bi'],   // stepped; engages on hard turns only (copy at 0x68)
+    [0x118, 'lateral/lean',               'bi'],
   ]],
-  ['Lean', [ [0x288,'lean (lead)','bi'], [0x28C,'lean (lag)','bi'] ]],
+  ['Lean', [
+    [0x288, 'lean (lead)',                'bi'],   // 0x288 leads 0x28C by ~1 frame
+    [0x28C, 'lean (lag)',                 'bi'],
+  ]],
   ['Terrain & hazards', [
-    [0x158,'rough terrain (off-road)','uni'], [0x298,'oil timer (slip-vuln, counts down)','uni'],
-    [0x114,'terrain grip?','uni'],
+    [0x158, 'rough terrain (off-road)',   'uni'],  // ~0 on road, 20–30 off-road (triplet 0x24/38/4C fires too)
+    [0x298, 'oil timer (slip-vuln)',      'uni'],  // set ~117 on oil contact, ticks down ~1/frame (~1.6s); cuts grip
   ]],
   ['Status', [
-    [0x2F0,'health','uni'], [0x2F4,'crash state','num'], [0x328,'rider index','num'],
+    [0x2F0, 'health',                     'uni'],  // mirrored at 0x2EC
+    [0x2F4, 'crash state',                'num'],  // 0 = upright
+    [0x328, 'rider index',                'num'],  // 0 = player (calibration anchor)
   ]],
-  ['Track distance (monotonic — frontier #1)', [
-    [0x1C,'track distance (fwd)','num'], [0x308,'progress? (starts at 0)','num'],
-    [0x30,'distance (copy)','num'], [0x310,'distance D','num'],
+  ['Track distance (frontier #1)', [
+    [0x1C,  'track distance (fwd)',       'num'],  // cumulative odometer, monotonic (copies 0x30/0x44/0x134/0x138)
+    [0x308, 'segment progress',           'num'],  // sawtooth — resets each track segment, not overall progress
+    [0x30,  'distance (copy)',            'num'],
+    [0x310, 'distance D',                 'num'],
   ]],
   ['Misc — active unknowns (watching for surprises)', [
-    [0xC,'+0xC','uni'], [0x10,'+0x10','bi'], [0x14,'+0x14','uni'], [0x18,'+0x18','uni'], [0x84,'+0x84','bi'], [0x88,'+0x88','uni'], [0xA0,'+0xA0','bi'], [0xA4,'+0xA4','uni'], [0xB0,'+0xB0','uni'], [0xB4,'+0xB4','uni'], [0xB8,'+0xB8','uni'], [0xC0,'+0xC0','uni'], [0xC8,'+0xC8','uni'], [0xCC,'+0xCC','uni'], [0xD4,'+0xD4','bi'], [0xD8,'+0xD8','uni'], [0xFC,'+0xFC','bi'], [0x10C,'+0x10C','bi'], [0x11C,'+0x11C','bi'], [0x12C,'+0x12C','bi'], [0x154,'+0x154','uni'], [0x15C,'+0x15C','uni'], [0x160,'+0x160','uni'], [0x17C,'+0x17C','uni'], [0x23C,'+0x23C','uni'], [0x244,'+0x244','uni'], [0x278,'+0x278','uni'], [0x2E8,'+0x2E8','bi'], [0x2F8,'+0x2F8','uni'], [0x30C,'+0x30C','uni'],
+    [0xC,'map load? (halting ramp)','uni'], [0x10,'map load? (halting ramp)','bi'],   // 0xC & 0x10 ramp up haltingly — segment/map streaming?
+    [0x14,'+0x14','uni'], [0x18,'+0x18','uni'], [0x84,'+0x84','bi'], [0x88,'+0x88','uni'], [0xA0,'+0xA0','bi'], [0xA4,'+0xA4','uni'], [0xB0,'+0xB0','uni'], [0xB4,'+0xB4','uni'], [0xB8,'+0xB8','uni'], [0xC0,'+0xC0','uni'], [0xC8,'+0xC8','uni'], [0xCC,'+0xCC','uni'], [0xD8,'+0xD8','uni'], [0xFC,'+0xFC','bi'], [0x11C,'+0x11C','bi'], [0x12C,'+0x12C','bi'], [0x154,'+0x154','uni'], [0x15C,'+0x15C','uni'], [0x160,'+0x160','uni'], [0x17C,'+0x17C','uni'], [0x23C,'+0x23C','uni'], [0x244,'+0x244','uni'], [0x278,'+0x278','uni'], [0x2F8,'+0x2F8','uni'], [0x30C,'+0x30C','uni'],
   ]],
 ];
 

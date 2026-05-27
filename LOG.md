@@ -49,7 +49,7 @@ for free. Key discoveries:
 ## 4. Offline reverse engineering
 
 Disassembled `ROADRASH.EXE` (`objdump`) around the cheat injection points and mapped the
-per-frame physics integrator. Rider-struct fields (see `RIDER_STRUCT.md`):
+per-frame physics integrator. Rider-struct fields (now documented inline in the `GROUPS` config in `hud.html`):
 
 | Offset | Field |
 |--------|-------|
