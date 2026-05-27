@@ -53,14 +53,17 @@ const GROUPS = [
   ['Motion', [
     [0xEC,'speed','uni'], [0xF0,'lateral motion (L/R)','bi'], [0xF4,'vertical vel (hills/jumps)','bi'],
   ]],
-  ['Slip / traction (tire screech!)', [
-    [0x5C,'slip force (engages on slide)','bi'], [0x68,'slip force (copy)','bi'],
-    [0x164,'slip intensity','uni'], [0x118,'slip angle','bi'],
+  ['Slip — speed-bleed on slides (screech ↔ high slip intensity)', [
+    [0x164,'slip intensity','uni'], [0x20,'slip scrub','uni'], [0x34,'slip scrub B','uni'],
   ]],
-  ['Bend & turn', [
-    [0x128,'road bend','bi'], [0x60,'turning state','bi'], [0x6C,'turning state (copy)','bi'],
+  ['Steering', [
+    [0x128,'road bend','bi'], [0x60,'turning state','bi'],
+    [0x5C,'hard-turn force','bi'], [0x118,'lateral/lean','bi'],
   ]],
   ['Lean', [ [0x288,'lean (lead)','bi'], [0x28C,'lean (lag)','bi'] ]],
+  ['Terrain', [
+    [0x158,'rough terrain (off-road)','uni'], [0x114,'terrain grip?','uni'], [0x130,'bump / wobble','bi'],
+  ]],
   ['Status', [
     [0x2F0,'health','uni'], [0x2F4,'crash state','num'], [0x328,'rider index','num'],
     [0x1C,'position A','num'], [0x30,'position B','num'], [0x308,'position C','num'], [0x310,'position D','num'],
@@ -133,7 +136,7 @@ es.onmessage = (e) => {
   // interpreted gauges (auto-scaled to running peak)
   for (const off in KNOWN) {
     const o = +off, i = o / 4, [, kind] = KNOWN[off], x = cur[i], pk = peak[i] || 1;
-    $('v' + o).innerHTML = x + ` <small>${lo[i]}…${hi[i]}</small>`;
+    $('v' + o).textContent = x;
     if (kind === 'uni') $('f' + o).style.width = Math.min(100, Math.abs(x) / pk * 100) + '%';
     else if (kind === 'bi') {
       const h = Math.min(100, Math.abs(x) / pk * 100) / 2;

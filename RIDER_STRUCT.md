@@ -43,16 +43,17 @@ Struct base = dword at 0x4642D8 (was 0x00E96B58 this race). Values are 16.16 fix
 | `+0x2F4` | crash/fall state | 0 when upright |
 | `+0x328` | rider index | 0 = player (our anchor check) |
 
-## SLIP found (telemetry.csv differential, screeching vs gentle turns)
-The earlier "+0x05C/slide" guesses were refined by logging the full struct during gentle
-turns then screeching slides:
+## Hard-turn force fields (the tire-screech / slip trigger is NOT yet identified)
+Logging the full struct during gentle vs hard turns refined these. NOTE: +0x5C/+0x164
+engage on HARD TURNING but do NOT correlate with the tire-screech sound — the actual
+screech/slip trigger is still unknown (needs a ground-truth-labeled run to find).
 
 | Offset | Field | Evidence |
 |--------|-------|----------|
 | `+0xF0` | lateral velocity (L/R) | present in ALL cornering, gentle→hard (mislabeled "slide") |
 | `+0x128` | road bend (track curvature pushing the rider) | ±50.0 max, scales with speed, 0 at standstill |
-| `+0x5C` (copy `+0x68`) | **slip / slide FORCE** | exactly 0 in normal cornering; engages (stepped, signed, ±50–63) ONLY when traction breaks → tire screech |
-| `+0x164` | **slip INTENSITY** (0–103) | fires in discrete hard-slide episodes; magnitude scales with slide severity; the screech correlate |
+| `+0x5C` (copy `+0x68`) | hard-turn force | 0 in normal cornering; engages (stepped, signed, ±50–63) on HARD turns — NOT the screech |
+| `+0x164` | hard-turn intensity (0–103) | fires in hard-turn episodes, magnitude scales with severity — NOT the screech |
 | `+0x118` | slip angle (signed, ±~43) | active across corners, grows with slide |
 | `+0x60`/`+0x6C` | turning state | L/R turn input/state |
 | `+0x288`/`+0x28C` | lean (lead / 1-frame-lagged copy) | |
@@ -61,9 +62,33 @@ Key distinction: lateral velocity (`+0xF0`) ≠ slip. There are hard-corner fram
 `+0xF0` where `+0x5C`/`+0x164` stay 0 (cornering without breaking traction). Slip = `+0x5C`
 engaged + `+0x164` ramping = the screech.
 
-So all targets resolved: **position** = +0x1C/+0x30/+0x308/+0x310, **turning** = bend +0x128
-+ turn state +0x60, **slip/screech** = +0x5C force & +0x164 intensity, **slide(lateral)** =
-+0xF0. Plus speed +0xEC, vertical vel +0xF4, crash +0x2F4.
+Targets so far: **position** = +0x1C/+0x30/+0x308/+0x310, **turning** = bend +0x128 + turn
+state +0x60, **lateral motion** = +0xF0, **hard-turn force** = +0x5C/+0x164. Plus speed
++0xEC, vertical vel +0xF4, crash +0x2F4.
+
+**Screech / slip — leading candidate `+0x20` (and `+0x34`):** using "turning AND losing
+speed" as a data-derived screech proxy (user's clue: screeching bleeds speed, turning
+doesn't), `+0x20`/`+0x34` are ~0 ~98% of the time and fire ONLY when decelerating — strongly
+in turn+decel, exactly 0 in turn+accel, and also on straight braking. Looks like the
+**speed-scrub / slip force** (range 0..~72k). `+0x48` is a torn-read copy of `+0x20`.
+To confirm: screech should coincide with `+0x20`/`+0x34` spiking, on both hard braking and
+slides. (`+0x164` slip-intensity only ×4.5 by this measure — secondary.)
+
+Copy pairs (differ in <0.3% of frames = torn reads, treat as identical): +0x108≈speed,
++0x68≈+0x5C, +0x6C≈+0x60, +0x48≈+0x20. Genuinely distinct: +0x104 vs +0xF0 (11%),
++0x288 vs +0x28C (lean lead/lag, 66%).
+
+Marked-run findings:
+- **Slip is slide-specific, not braking.** During a "dismount-key spam" run the bike braked
+  hard (speed 6860→1084) in a straight line, yet +0x20/+0x34/+0x164/+0xF0/+0x5C were all
+  ZERO. So those fields engage only on sideways sliding, not on deceleration per se. User's
+  ear: screech ↔ high +0x164. So slip/screech = +0x164 intensity (+0x20/+0x34 = the
+  speed-scrub it causes), distinct from the dismount/brake decel mechanism.
+- **Dismount key is NOT in the rider struct** — no per-press field toggles; only the speed
+  drop is visible. Input/key state lives elsewhere (global input buffer). Can't be used as an
+  in-struct event marker.
+- **Rough terrain / off-road = +0x158** (0 on road, 20–30 on the shoulder). Companions:
+  +0x114 (→30 off-road), +0x130 (oscillates ±600 = bumpiness).
 
 ## How these map into the running game
 Win95 loads ROADRASH.EXE at 0x400000, so guest-virtual addresses == `0x400000 + RVA`.
