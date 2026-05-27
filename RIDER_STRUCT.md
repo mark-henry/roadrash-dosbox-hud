@@ -95,8 +95,13 @@ Marked-run findings:
 - **Dismount key is NOT in the rider struct** — no per-press field toggles; only the speed
   drop is visible. Input/key state lives elsewhere (global input buffer). Can't be used as an
   in-struct event marker.
-- **Rough terrain / off-road = +0x158** (0 on road, 20–30 on the shoulder). Companions:
-  +0x114 (→30 off-road), +0x130 (oscillates ±600 = bumpiness).
+- **Rough terrain / off-road = +0x158** (×7.5: ~89% active & mean 20 off-road vs 9% & 1.8
+  on-road, from a clean offroad/on-road marked series). Companions: triplet +0x24/+0x38/+0x4C
+  is EXACTLY 0 on-road, fires (~21%, small ~6.5) off-road (per-wheel contact?); +0x114 →30
+  off-road. Off-road also runs +0x164 (slip) and +0x5C ~2× higher = reduced grip, like oil.
+- **+0x130 = bend push force** (NOT bumpiness): correlates 0.76 with road bend +0x128 at
+  ~bend/351, same sign — likely the lateral push the bend produces, distinct from the bend
+  value itself.
 - **Oil-slick "oily state" = +0x298** — a countdown timer set to ~117 on contact and
   ticking down ~1/frame to 0 over ~1.6s (clean monotonic decay confirmed across 3 marked oil
   hits; ×11.6 vs baseline). This is the post-oil slip-vulnerability window the physics reads

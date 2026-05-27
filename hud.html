@@ -57,17 +57,23 @@ const GROUPS = [
     [0x164,'slip intensity (→ screech)','uni'],
   ]],
   ['Steering', [
-    [0x128,'road bend','bi'], [0x60,'turning state','bi'],
+    [0x128,'road bend','bi'], [0x130,'bend push force','bi'], [0x60,'turning state','bi'],
     [0x5C,'hard-turn force','bi'], [0x118,'lateral/lean','bi'],
   ]],
   ['Lean', [ [0x288,'lean (lead)','bi'], [0x28C,'lean (lag)','bi'] ]],
   ['Terrain & hazards', [
     [0x158,'rough terrain (off-road)','uni'], [0x298,'oil timer (slip-vuln, counts down)','uni'],
-    [0x114,'terrain grip?','uni'], [0x130,'bump / wobble','bi'],
+    [0x114,'terrain grip?','uni'],
   ]],
   ['Status', [
     [0x2F0,'health','uni'], [0x2F4,'crash state','num'], [0x328,'rider index','num'],
-    [0x1C,'position A','num'], [0x30,'position B','num'], [0x308,'position C','num'], [0x310,'position D','num'],
+  ]],
+  ['Track distance (monotonic — frontier #1)', [
+    [0x1C,'track distance (fwd)','num'], [0x308,'progress? (starts at 0)','num'],
+    [0x30,'distance (copy)','num'], [0x310,'distance D','num'],
+  ]],
+  ['Misc — active unknowns (watching for surprises)', [
+    [0xC,'+0xC','uni'], [0x10,'+0x10','bi'], [0x14,'+0x14','uni'], [0x18,'+0x18','uni'], [0x84,'+0x84','bi'], [0x88,'+0x88','uni'], [0xA0,'+0xA0','bi'], [0xA4,'+0xA4','uni'], [0xB0,'+0xB0','uni'], [0xB4,'+0xB4','uni'], [0xB8,'+0xB8','uni'], [0xC0,'+0xC0','uni'], [0xC8,'+0xC8','uni'], [0xCC,'+0xCC','uni'], [0xD4,'+0xD4','bi'], [0xD8,'+0xD8','uni'], [0xFC,'+0xFC','bi'], [0x10C,'+0x10C','bi'], [0x11C,'+0x11C','bi'], [0x12C,'+0x12C','bi'], [0x154,'+0x154','uni'], [0x15C,'+0x15C','uni'], [0x160,'+0x160','uni'], [0x17C,'+0x17C','uni'], [0x23C,'+0x23C','uni'], [0x244,'+0x244','uni'], [0x278,'+0x278','uni'], [0x2E8,'+0x2E8','bi'], [0x2F8,'+0x2F8','uni'], [0x30C,'+0x30C','uni'],
   ]],
 ];
 
