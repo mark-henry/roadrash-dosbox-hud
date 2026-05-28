@@ -86,7 +86,9 @@ const GROUPS = [
   ['Motion', [
     [0xEC,  'speed',                      'uni'],  // forward speed (near-copy at 0x108)
     [0x2E8, 'forward speed (≈0xEC)',       'uni'],  // ~identical to 0xEC (corr 1.0, +24)
+    [0x15C, 'speed (coarse)',             'uni'],  // tracks speed (r=0.93), ≈ 0xEC/326 — low-res flavor
     [0x114, 'throttle/brake',             'bi'],   // player accel/brake input level
+    [0x23C, 'gear (0 = 1st)',             'num'],  // current gear
     [0xF0,  'lateral velocity (L/R)',     'bi'],   // instantaneous sideways speed (copy at 0x104)
     [0x10C, 'net lateral movement',       'bi'],   // bounded ±~2500; not a clean integral of 0xF0
     [0xD4,  'lateral pos?',               'bi'],   // lateral-ish; does NOT saturate at the road edge
@@ -122,8 +124,8 @@ const GROUPS = [
     [0x310, 'distance D',                 'num'],
   ]],
   ['Misc — active unknowns (watching for surprises)', [
-    [0xC,'map load? (halting ramp)','uni'], [0x10,'map load? (halting ramp)','bi'],   // 0xC & 0x10 ramp up haltingly — segment/map streaming?
-    [0x14,'+0x14','uni'], [0x18,'+0x18','uni'], [0x84,'+0x84','bi'], [0x88,'+0x88','uni'], [0xA0,'+0xA0','bi'], [0xA4,'+0xA4','uni'], [0xB0,'+0xB0','uni'], [0xB4,'+0xB4','uni'], [0xB8,'+0xB8','uni'], [0xC0,'+0xC0','uni'], [0xC8,'+0xC8','uni'], [0xCC,'+0xCC','uni'], [0xD8,'+0xD8','uni'], [0xFC,'+0xFC','bi'], [0x11C,'+0x11C','bi'], [0x12C,'+0x12C','bi'], [0x154,'+0x154','uni'], [0x15C,'+0x15C','uni'], [0x160,'+0x160','uni'], [0x17C,'+0x17C','uni'], [0x23C,'+0x23C','uni'], [0x244,'+0x244','uni'], [0x278,'+0x278','uni'], [0x2F8,'+0x2F8','uni'], [0x30C,'+0x30C','uni'],
+    [0xC,'timer','uni'], [0x10,'timer','bi'],   // raw monotonic timers; the "halting" was HUD stream hiccups, not the data
+    [0x14,'+0x14','uni'], [0x18,'+0x18','uni'], [0x84,'+0x84','bi'], [0x88,'+0x88','uni'], [0xA0,'+0xA0','bi'], [0xA4,'+0xA4','uni'], [0xB0,'+0xB0','uni'], [0xB4,'+0xB4','uni'], [0xB8,'+0xB8','uni'], [0xC0,'+0xC0','uni'], [0xC8,'+0xC8','uni'], [0xCC,'+0xCC','uni'], [0xD8,'+0xD8','uni'], [0xFC,'+0xFC','bi'], [0x11C,'+0x11C','bi'], [0x12C,'+0x12C','bi'], [0x154,'+0x154','uni'], [0x160,'+0x160','uni'], [0x17C,'+0x17C','uni'], [0x244,'+0x244','uni'], [0x278,'+0x278','uni'], [0x2F8,'+0x2F8','uni'], [0x30C,'+0x30C','uni'],
   ]],
 ];
 
@@ -224,15 +226,17 @@ es.onmessage = (e) => {
     }
     if (o === 0x2F4) $('v' + o).className = 'val' + (x ? ' crash-on' : '');
   }
-  // discovery table values (text only each frame; rows reorder on header click)
-  for (let i = 0; i < N; i++) {
-    $('c' + i).textContent = cur[i];
-    $('lo' + i).textContent = lo[i] === Infinity ? '' : lo[i];
-    $('hi' + i).textContent = hi[i] === -Infinity ? '' : hi[i];
-    $('rg' + i).textContent = (hi[i] - lo[i]) || 0;
-    $('r' + i).className = (hi[i] - lo[i]) ? 'active' : '';
+  // discovery table — throttled to ~10 Hz (208 rows) so gauges + strip stay smooth at full rate
+  if (++frame % 3 === 0) {
+    for (let i = 0; i < N; i++) {
+      $('c' + i).textContent = cur[i];
+      $('lo' + i).textContent = lo[i] === Infinity ? '' : lo[i];
+      $('hi' + i).textContent = hi[i] === -Infinity ? '' : hi[i];
+      $('rg' + i).textContent = (hi[i] - lo[i]) || 0;
+      $('r' + i).className = (hi[i] - lo[i]) ? 'active' : '';
+    }
+    if (sortKey !== 'off') resort();
   }
-  if (++frame % 15 === 0 && sortKey !== 'off') resort();   // re-sort ~2x/sec when sorting by activity
 };
 es.onerror = () => $('err').textContent = '⚠ stream disconnected — is reader.py running?';
 
